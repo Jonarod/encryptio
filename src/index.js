@@ -1,32 +1,101 @@
 var crypto = require("crypto")
 
-class encryptio {
-  constructor(password, options){
-    this.key = password
-    this.iv_length = ((options && options.iv_length) && options.iv_length) || 16
-    this.algorithm = ((options && options.algorithm) && options.algorithm) || 'aes-256-cbc'
-    this.encoding = ((options && options.encoding) && options.encoding) || 'base64'
-  }
-  encrypt(text){
-    return new Promise( (resolve) => {
-      const iv = crypto.randomBytes(this.iv_length)
-      let cipher = crypto.createCipheriv(this.algorithm, Buffer.from(this.key), iv)
-      var result = cipher.update(text, "utf8", this.encoding)
-      result += cipher.final(this.encoding)
-      resolve(iv.toString(this.encoding) + ':' + result)
-    })
-  }
-  decrypt(text){
-    return new Promise( (resolve) => {
-      let textParts = text.split(':')
-      let iv = Buffer.from(textParts.shift(), this.encoding)
-      let encryptedText = Buffer.from(textParts.join(':'), this.encoding)
-      let decipher = crypto.createDecipheriv(this.algorithm, Buffer.from(this.key), iv)
-      var result = decipher.update(encryptedText, this.encoding)
-      result += decipher.final()
-      resolve(result)
-    })
+const encryptSync = function(secret_key, clear_text, options={iv_length:16,algorithm:'aes-256-gcm',encoding:'base64'}){
+  const iv_length = options.iv_length || 16
+  const algorithm = options.algorithm || 'aes-256-gcm'
+  const encoding = options.encoding || 'base64'
+  const authAlgos = ['gcm']
+  const isAuthAlgo = algorithm.substr(-3).indexOf(authAlgos)!=-1
+
+  const ivBuf = Buffer.from(crypto.randomBytes(iv_length), 'utf8')
+  const cipher = crypto.createCipheriv(algorithm, Buffer.from(secret_key), ivBuf)
+
+  try {
+    const result =  `${cipher.update(clear_text, "utf8", encoding)}${cipher.final(encoding)}`
+    return [ivBuf.toString(encoding), result, (isAuthAlgo?cipher.getAuthTag().toString(encoding):'')]
+  } catch (err) {
+    return err
   }
 }
 
-module.exports = encryptio
+const decryptSync = function(secret_key, [enc_iv, enc_text, enc_auth], options={algorithm:'aes-256-gcm',encoding:'base64'}){
+  const algorithm = options.algorithm || 'aes-256-gcm'
+  const encoding = options.encoding || 'base64'
+  const authAlgos = ['gcm']
+  const isAuthAlgo = algorithm.substr(-3).indexOf(authAlgos)!=-1
+
+  const authBuf = isAuthAlgo?Buffer.from(enc_auth, encoding):''
+  const ivBuf = Buffer.from(enc_iv, encoding)
+  const textBuf = Buffer.from(enc_text, encoding)
+   
+  try {
+    const decipher = crypto.createDecipheriv(algorithm, Buffer.from(secret_key), ivBuf)
+    if(isAuthAlgo) {
+      decipher.setAuthTag(authBuf)
+    }
+    var result = decipher.update(textBuf, encoding, 'utf8')
+    result += decipher.final('utf8')
+
+    return result
+  } catch (err){
+
+    return err
+  }
+
+}
+
+
+
+const encrypt = function(secret_key, clear_text, options={iv_length:16,algorithm:'aes-256-gcm',encoding:'base64'}){
+  const iv_length = options.iv_length || 16
+  const algorithm = options.algorithm || 'aes-256-gcm'
+  const encoding = options.encoding || 'base64'
+  const authAlgos = ['gcm']
+  const isAuthAlgo = algorithm.substr(-3).indexOf(authAlgos)!=-1
+
+  return new Promise( (resolve, reject) => {
+    const ivBuf = Buffer.from(crypto.randomBytes(iv_length), 'utf8')
+    const cipher = crypto.createCipheriv(algorithm, Buffer.from(secret_key), ivBuf)
+
+    try {
+      const result =  `${cipher.update(clear_text, "utf8", encoding)}${cipher.final(encoding)}`
+      resolve([ivBuf.toString(encoding), result, (isAuthAlgo?cipher.getAuthTag().toString(encoding):'')])
+    } catch (err) {
+      reject(err)
+    }
+
+  })
+}
+
+const decrypt = function(secret_key, [enc_iv, enc_text, enc_auth], options={algorithm:'aes-256-gcm',encoding:'base64'}){
+  const algorithm = options.algorithm || 'aes-256-gcm'
+  const encoding = options.encoding || 'base64'
+  const authAlgos = ['gcm']
+  const isAuthAlgo = algorithm.substr(-3).indexOf(authAlgos)!=-1
+
+  return new Promise( (resolve, reject) => {
+
+    const authBuf = isAuthAlgo?Buffer.from(enc_auth, encoding):''
+    const ivBuf = Buffer.from(enc_iv, encoding)
+    const textBuf = Buffer.from(enc_text, encoding)
+
+    
+    try {
+
+      const decipher = crypto.createDecipheriv(algorithm, Buffer.from(secret_key), ivBuf)
+      if(isAuthAlgo) {
+        decipher.setAuthTag(authBuf)
+      }
+      var result = decipher.update(textBuf, encoding, 'utf8')
+      result += decipher.final('utf8')
+
+      resolve(result)
+    } catch (err){
+
+      reject(err)
+    }
+  })
+
+}
+
+module.exports = {encrypt, decrypt, encryptSync, decryptSync}

@@ -3,8 +3,9 @@
 Simple, yet secure, encryption / decryption using Javascript.
 
 - **ZERO dependencies:** uses `crypto` which natively ships with Node.js without any further install
+- **Tree-shakeable:** import only functions you need.
 - **Random:** Encrypted strings are always different *( using Initialization Vector )*
-- **Asynchronous:** Promise-based, usable using either `.then()` or `async/await`
+- **Asynchronous or Synchronous:** Choose between promise-based (`.then()` or `async/await`) or Sync
 - **Options:** support manual algorithms and encodings (see the `Options` section)
 
 
@@ -13,52 +14,30 @@ Simple, yet secure, encryption / decryption using Javascript.
 `npm install encryptio`
 
 
-#### Using `.then()`:
+#### Asynchronous (default):
 
 ```js
-var Encryptio = require('encryptio')
+var encrypt = require('encryptio').encrypt
+var decrypt = require('encryptio').decrypt
 // or using ES6:
-import Encryptio from 'encryptio'
+import {encrypt, decrypt} from 'encryptio'
 
-var my_secret = process.env.SECRET_KEY // See note on "storing the secret key"
-var safe = new Encryptio(my_secret); // secret_key should be 32 characters for AES256
-
-var text = 'Hello World'
-
-console.log('Original string: ', text)
-
-safe.encrypt(text).then( encText => {
-    console.log('Encrypted string: ', encText)
-
-    safe.decrypt(enText).then( decText => {
-        console.log('Decrypted string: ', decText)
-    })
-})
-
-// > prints:
-// Original string: Hello World
-// Encrypted string: 6jIW7HfpEaarSm0B/o4qDw==:ch9KL0HyTlASypHQfm/XUg==
-// Decrypted string: Hello World
-```
-
-#### Using `async/await`:
-
-```js
-var Encryptio = require('encryptio')
-// or using ES6:
-import Encryptio from 'encryptio'
-
-var my_secret = process.env.SECRET_KEY // See note on "storing the secret key"
-var safe = new Encryptio(my_secret); // secret_key should be 32 characters for AES256
+var MY_SECRET = process.env.SECRET_KEY // See note on "storing the secret key"
+                                       // secret_key should be 32 characters for AES256
 
 var main = async function(){
-    var text = 'Hello World'
-    console.log('Original string: ', text)
+    var clearText = 'Hello World'
+    console.log('Original string: ', clearText)
 
-    var encText = await safe.encrypt(text)
-    console.log('Encrypted string: ', encText)
+    var encText = await encrypt(MY_SECRET, clearText)    // Note thay encrypt() outputs
+                                                         // an array as follow:
+                                                         // [IV, String, Auth]
+    console.log('Encrypted string: ', encText.join('.')) 
 
-    var decText = await safe.encrypt(encText)
+
+    var decText = await encrypt(MY_SECRET, encText)      // Note that decrypt() needs
+                                                         // an array as follow
+                                                         // [IV, String, Auth]
     console.log('Encrypted string: ', decText)
 }
 
@@ -66,42 +45,106 @@ main()
 
 // > prints:
 // Original string: Hello World
-// Encrypted string: 6jIW7HfpEaarSm0B/o4qDw==:ch9KL0HyTlASypHQfm/XUg==
+// Encrypted string: 5lSto7M4riJKmorPvrToBQ==.qmZZr48DEDYARyQ=.okPYfpnuBj24UDMrdKEYKQ==
 // Decrypted string: Hello World
 ```
+
+#### Synchronous
+
+```js
+var encrypt = require('encryptio').encrypt
+var decrypt = require('encryptio').decrypt
+// or using ES6:
+import {encryptSync, decryptSync} from 'encryptio'
+
+var MY_SECRET = process.env.SECRET_KEY // See note on "storing the secret key"
+                                       // secret_key should be 32 characters for AES256
+
+var clearText = 'Hello World'
+console.log('Original string: ', clearText)
+
+var encText = encryptSync(MY_SECRET, clearText)
+console.log('Encrypted string: ', encText)
+
+var decText = decryptSync(MY_SECRET, encText)
+console.log('Encrypted string: ', decText)
+
+// > prints:
+// Original string: Hello World
+// Encrypted string: 5lSto7M4riJKmorPvrToBQ==.qmZZr48DEDYARyQ=.okPYfpnuBj24UDMrdKEYKQ==
+// Decrypted string: Hello World
+```
+
+# Why encrypt() outputs 3 things in an array ?
+
+Well, `encrypt()` and `encryptSync()` output an array in the form of:
+
+```js
+let [IV, EncString, Auth] = encrypt(process.env.SECRET_KEY, 'Hello')
+```
+
+The same array is expected to be provided to `decrypt()` and `decryptSync()`:
+
+```js
+decrypt(process.env.SECRET_KEY, [IV, EncString, Auth])
+```
+
+Here is what they represent:
+
+- **IV** is the Initialization Vector (=the seed). It is mandatory in GCM, CBC and CTR. Since the IV is changed at each encryption, the `decrypt()` function needs to know the seed to calculate the correct decryption.
+
+- **EncString** is the actual encrypted string.
+
+- **Auth** is the signature part for the authentication. It is output (and required) only if the `algorithm` ends by `gcm` (like the default `aes-256-gcm`). If non-auth algorithms are used, like `aes-256-cbc` for example, this `Auth` part is not output in `encrypt()` nor `encryptSync()`, and not required in `decrypt()` nor `decryptSync()`.
+
+
+##### Why the fuzz ?? Why not just concatenate everything off the bat in the library ?!
+
+Short answer, for modularity.
+
+Long answer: one can decide to apply further transformation to each part of the output. For example apply a salt. Another thing is how to store these parts: one could eventually store each part in separate stores. Finally, one could trim off some part of the `IV` and `Auth` string when using `base64` encoding (default).
 
 
 # Options
 
-By default, `encryptio` uses `aes_256_cbc` algorithm to encrypt strings and `base64` to encode them.
+By default, `encryptio` uses `aes_256_gcm` algorithm to encrypt strings and `base64` to encode them.
 
-Both options are manually configurable. Just pass an object to the `Encryptio` constructor, like so:
+Both options are manually configurable. Just pass an object to encrypt/decrypt functions like so:
 
 ```js
 var custom_options = {
-    algorithm: 'aes256',
+    algorithm: 'aes-256-cbc',
     encoding: 'hex'
 }
 
-var safe = new Encryptio(process.env.SECRET_KEY, custom_options);
+var main = async function(){
+    const clearText = 'Hello World';
+    const encText = await encrypt(process.env.SECRET_KEY, clearText, custom_options);
+    await decrypt(process.env.SECRET_KEY, encText, custom_options);
+
+    // or using Sync
+    const encText = encryptSync(process.env.SECRET_KEY, clearText, custom_options);
+    decryptSync(process.env.SECRET_KEY, encText, custom_options);
+}
+
 ```
 
-Here are some options:
+There are a lot of options to choose from when it comes to encryption. CBC, CTR and GCM are the most used and most secure. Actually, a lot of examples on tutorials use CBC, but this should not be the best practice to widespread. In fact, CBC is a strong encryption algorithm but it lacks authentication and should be used with an extra layer of authentication like HMAC or else... GCM has the advantage of combining both encryption + authentication, making it a better choice for most situations.
+
 
 ##### algorithm
 
-- `aes-256-cbc` **(default)** : requires a 32 byte secret key
-- `aes256` : requires a 32 byte secret key
-- `aes-192-cbc` : requires a 24 byte secret key
-- `aes192` : requires a 24 byte secret key
-- `aes-128-cbc` : requires a 16 byte secret key
-- `aes128` : requires a 16 byte secret key
+- `aes-256-gcm` **(default)** : requires a 32 byte secret key. Has Auth.
+- `aes-256-ctr` : requires a 32 byte secret key. No Auth.
+- `aes-256-cbc` : requires a 32 byte secret key. No Auth.
+- ... : there are a lot of other algorithms. Really, stick to one of those 3, or better: keep it to default `aes-256-gcm`.
+
 
 ##### encoding
 
-- `base64` **(default)**
-- `hex`
-- `binary`
+- `base64` **(default)**: output balanced size readable strings
+- `hex`: output readable strings larger than `base64`
+- `binary`: output compact strings but not readable (ok for inter-machine but cannot share with humans)
 
 
 # Note on storing the secret key
@@ -200,13 +243,16 @@ You can safely use the lib to encrypt low to highly confidential things.
 
 Just to recap, here are some common things adressed:
 
-- This is `AES-256-CBC` by default. One cool thing about it is that the encryption is not made by blocks of words but rather given the whole string. So it is not possible to statistically count word/letter frequences against the encrypted string.
+- This is `AES-256-GCM` by default. One cool thing about it is that the encryption is not made by blocks of words but rather given the whole string. So it is not possible to statistically count word/letter frequencies against the encrypted string.
 
-- `AES-256-CBC` enforces a 32 bytes long secret key composed of any characters. It would require billions of billions of years to try all possibilities of the secret key. That beinng said, if your secret key is `00000000000000000000000000000000` it may take only 2 minutes... since any brute-force program might just start with zeros, then `12345...` then dictionnaries... So make it crazy random !
+- `AES-256-GCM` enforces a 32 bytes long secret key composed of any `utf-8` characters. It would require billions of billions of years to try all possibilities of the secret key. That beinng said, if your secret key is `00000000000000000000000000000000` it may take only 2 minutes... since any brute-force program might just start with easy strings first (zeros, sequences, words dictionnaries...). **So make it is VITAL to make your secret as random as possible !**
 
-- Since `encryptio` uses a random Initilization Vector, several encryption of the same string will always output a new encrypted string. This means that an attacker cannot compare two encrypted strings in the hope to find patterns.
+- `AES-256-GCM` combines encryption with a signature for authentication. This means that one first step is made to obfuscate the original string, but a second step is made to sign the encrypted string so that an attacker cannot forge the encrypted string. If an attacker attempts to modify the encrypted string (trying to insert/guess something new), the algorithm will not even try to decrypt the string: it will know the string has been corrupted.
 
-Really, unless you pick a dumb easy secret-key and/or blindly distribute it to the cloud... you should be able to sleep peacefully. It would require a considerable amount of efforts and money to break this encryption.
+- Since `encryptio` uses a random Initilization Vector for each encryption, several encryption of the same string will always output a completely new encrypted string. This means that an attacker cannot compare two encrypted strings in the hope to find patterns.
+
+
+Really, unless you pick a dumb easy secret-key and/or blindly distribute it to the world... you should be able to sleep peacefully. It would require a considerable amount of efforts and money to break this encryption.
 
 
 ##### DONTs
@@ -223,6 +269,6 @@ Finally, if you store a secret key that gives a $200 billion price... someone mi
 
 **!! USE A REALLY RANDOM SECRET KEY !!**
 
-**!! NEVER SHARE IT... LIKE NEVER EVER EVER !!**
+**!! NEVER SHARE IT !!**
 
-...and you'll be cool ;)
+...and you should be safe ;)
