@@ -1,7 +1,7 @@
 {
   "name": "encryptio",
   "description": "Lightweight, secure and straightforward encryption & decryption for Node.js: 30 LOC, ",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "dist/encryptio.js",
   "module": "dist/encryptio.es.js",
   "jsnext:main": "dist/encryptio.es.js",

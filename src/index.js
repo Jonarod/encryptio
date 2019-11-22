@@ -4,8 +4,8 @@ class encryptio {
   constructor(password, options){
     this.key = password
     this.iv_length = ((options && options.iv_length) && options.iv_length) || 16
-    this.algorithm = ((options && options.iv_length) && options.algorithm) || 'aes-256-cbc'
-    this.encoding = ((options && options.iv_length) && options.encoding) || 'base64'
+    this.algorithm = ((options && options.algorithm) && options.algorithm) || 'aes-256-cbc'
+    this.encoding = ((options && options.encoding) && options.encoding) || 'base64'
   }
   encrypt(text){
     return new Promise( (resolve) => {
