@@ -235,6 +235,9 @@ var my_secret = process.env.SECRET_KEY
 
 # How secure is this ?
 
+[Good read is this SO thread](https://stackoverflow.com/questions/1220751/how-to-choose-an-aes-encryption-mode-cbc-ecb-ctr-ocb-cfb)
+
+
 ##### DOs
 
 You can safely use the lib to encrypt low to highly confidential things.
